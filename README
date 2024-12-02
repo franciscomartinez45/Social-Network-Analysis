@@ -21,7 +21,7 @@ Supervised Machine Learning sandbox used to explore different message passing an
 ## Screenshots
 
 Sample result of 128 nodes x 125 edges using GTgraph Synthetic Data Generator Suite
-![App Screenshot](img/visualization.png)
+![App Screenshot](https://github.com/franciscomartinez45/Graph-Convolutional-Network/blob/main/img/visualization.png)
 
 ## Installation
 
