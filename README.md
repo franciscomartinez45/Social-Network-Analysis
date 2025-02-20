@@ -14,9 +14,9 @@ Supervised Machine Learning sandbox used to explore different message passing an
 
 ## Features
 
-- 🌟 **Interactive Visualization**: Leverages NetworkX and Matplotlib to visualize graph structures, node influences, and model predictions.
-- ⚡ **Health Equity Focus**: Tailored to study and address health disparities in underserved or misrepresented communities.
-- 🔧 **Misinformation Modeling**: Analyzes and models the spread of health-related information (or misinformation) across social networks, providing actionable insights for intervention strategies.
+- **Interactive Visualization**: Leverages NetworkX and Matplotlib to visualize graph structures, node influences, and model predictions.
+- **Health Equity Focus**: Tailored to study and address health disparities in underserved or misrepresented communities.
+- **Misinformation Modeling**: Analyzes and models the spread of health-related information (or misinformation) across social networks, providing actionable insights for intervention strategies.
 
 ## Screenshots
 
@@ -29,7 +29,7 @@ To get a local copy up and running, follow these steps:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/username/my-awesome-project.git
+   git clone https://github.com/franciscomartinez45/Graph-Convolutional-Network.git
    ```
 
 ## Acknowledgments
