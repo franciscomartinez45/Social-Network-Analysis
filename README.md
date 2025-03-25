@@ -21,12 +21,16 @@ Supervised Machine Learning sandbox used to explore different message passing an
 
 ## Screenshots
 
-Sample result of 100 nodes using NetworkX synthetic graph generator
-![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/tree/main/Sample/graph.jpg)
-![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/main/Sample/metrics.txt)
-![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/main/Sample/training_loss.jpg)
-![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/main/Sample/shap_summary.png)
-![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/main/Sample/node_activation.jpg)
+1. Sample result of 100 nodes using NetworkX synthetic graph generator
+   ![App Screenshot](Sample/graph.jpg)
+2. Metrics extracted from running the model
+   [Click here to view metrics](Sample/metrics.txt)
+3. Training Loss
+   ![App Screenshot](Sample/training_loss.jpg)
+4. SHAP Feature importance summary
+   ![App Screenshot](Sample/shap_summary.png)
+5. Node activation
+   ![App Screenshot](Sample/node_activation.jpg)
 
 ## Installation
 
