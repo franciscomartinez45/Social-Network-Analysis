@@ -21,8 +21,12 @@ Supervised Machine Learning sandbox used to explore different message passing an
 
 ## Screenshots
 
-Sample result of 128 nodes x 125 edges using GTgraph Synthetic Data Generator Suite
-![App Screenshot](https://github.com/franciscomartinez45/Graph-Convolutional-Network/blob/main/img/visualization.png)
+Sample result of 100 nodes using NetworkX synthetic graph generator
+![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/graph.jpg)
+![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/metrics.txt)
+![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/training_loss.jpg)
+![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/shap_summary.png)
+![App Screenshot](https://github.com/franciscomartinez45/Social-Network-Analysis/node_activation.jpg)
 
 ## Installation
 
@@ -30,7 +34,7 @@ To get a local copy up and running, follow these steps:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/franciscomartinez45/Graph-Convolutional-Network.git
+   git clone https://github.com/franciscomartinez45/Social-Network-Analysis.git
    ```
 
 ## Acknowledgments
