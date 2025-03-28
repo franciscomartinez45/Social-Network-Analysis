@@ -1,3 +1,4 @@
+import random
 import os
 from datetime import datetime
 import torch
@@ -10,6 +11,13 @@ from torch_geometric.nn import GATConv
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import  explained_variance_score, mean_absolute_error, mean_squared_error, r2_score
 import shap
+import kagglehub
+import pandas as pd
+
+# Kaggle datasets
+
+dataset1= {"handle":"emirhanai/social-media-usage-and-emotional-well-being","file":"/train.csv", "columns":["Daily_Usage_Time (minutes)", "Posts_Per_Day", "Likes_Received_Per_Day", "Comments_Received_Per_Day", "Messages_Sent_Per_Day"]} 
+dataset2={"handle":"muhammadroshaanriaz/time-wasters-on-social-media","file":"/Time-Wasters on Social Media.csv","columns":["Income","Total Time Spent","Number of Sessions","Importance Score","Scroll Rate"]}
 
 # RMAT graph path
 
@@ -18,24 +26,29 @@ rmat_path = "/home/fmartinez/research/GAT-test/GTgraph_data/data.txt"
 # Define parameters for model training
 hidden_layers = 32
 learning_rate = 0.001
-epochs_ = 120
+epochs_ = 150
+# Select the top % percent nodes 
+influential_percent = 0.25
+
 
 # Initialize the social network
 
 
 # Initialize directories
 DIRECTORY = "IMG/"
-try: 
-    os.makedirs(F"{DIRECTORY}",exist_ok=True)
-    print(f"Folder `{DIRECTORY}` created.")
-except FileExistsError:
-    print(f"Folder `{DIRECTORY}` already exists.")
-    
 SUB_DIRECTORY = f"{datetime.now()}-lr:{learning_rate}-e:{epochs_}-dh:{hidden_layers}"
-try: 
-    os.makedirs(F"{DIRECTORY}{SUB_DIRECTORY}")
-except FileExistsError:
-    print(f"Folder `{SUB_DIRECTORY}` in `{DIRECTORY}` already exists.")
+
+def make_directories():
+    try: 
+        os.makedirs(F"{DIRECTORY}",exist_ok=True)
+        print(f"Folder `{DIRECTORY}` created.")
+    except FileExistsError:
+        print(f"Folder `{DIRECTORY}` already exists.")
+        
+    try: 
+        os.makedirs(F"{DIRECTORY}{SUB_DIRECTORY}")
+    except FileExistsError:
+        print(f"Folder `{SUB_DIRECTORY}` in `{DIRECTORY}` already exists.")
 
 
 class GATPropagation(torch.nn.Module):
@@ -48,18 +61,14 @@ class GATPropagation(torch.nn.Module):
             x = self.conv1(x, edge_index).relu()
             x = self.conv2(x, edge_index)
             return torch.sigmoid(x)  
-
-def SocialNetwork(**kwargs):
+        
+def graph_features(**kwargs):
     G = kwargs.get("graph")
-    n_nodes = kwargs.get("nodes")
-    m_edges = kwargs.get("edges")
-    graph_name = kwargs.get("graph_name")
-    # Convert to torch tensor
-    edge_index = torch.tensor(np.array(G.edges()).T, dtype=torch.long)
-
-    # Generate node features
+    dataset = kwargs.get("dataset")
+    dataset["columns"] = ["Degree", "Eigenvector Centrality", "Betweenness Centrality", "PageRank"]
+     # Generate node features
     pagerank = nx.pagerank(G)
-    clustering_coeff = nx.clustering(G)
+    #clustering_coeff = nx.clustering(G)
     features = []
     for node in G.nodes():
         features.append([ 
@@ -69,25 +78,62 @@ def SocialNetwork(**kwargs):
             pagerank[node],
             #clustering_coeff[node]
         ])
+    return np.array(features, dtype=np.float32)
+
+
+def get_kaggle_dataset(**kwargs):
+    dataset = kwargs.get("dataset")
+    size = kwargs.get("size")
+    dataset_path = kagglehub.dataset_download(dataset.get("handle"))
+    df = pd.read_csv(dataset_path+dataset.get("file"))
+    return np.array(df[dataset.get("columns")][:size], dtype=np.float32)
+
+def influential_hubs(**kwargs):
+    standardized_features = kwargs.get("features")
+    num_influential = kwargs.get("percent")
+    n_nodes = kwargs.get("size")
+    combined_scores = standardized_features.sum(axis=1)
+    # Sort nodes based on combined influence scores
+    sorted_nodes = torch.argsort(combined_scores, descending=True)
+    influential_nodes = sorted_nodes[:num_influential]
+    return influential_nodes
+
+
+
+
+def SocialNetwork(**kwargs):
     
-    features = np.array(features, dtype=np.float32)
+    G = kwargs.get("graph")
+    n_nodes = kwargs.get("nodes")
+    m_edges = kwargs.get("edges")
+    graph_name = kwargs.get("graph_name")
+    dataset = kwargs.get("dataset")
+    # Convert to torch tensor
+    edge_index = torch.tensor(np.array(G.edges()).T, dtype=torch.long)
+   
+    graph_nodes = G.nodes
+    
+    # dataset is only used to add features columns
+    #features = graph_features(graph = G, dataset = dataset)
+    
+
+    features = get_kaggle_dataset(dataset=dataset, size = len(graph_nodes))
 
     # Standardize features
     scaler = StandardScaler()
     standardized_features = scaler.fit_transform(features)
     standardized_features = torch.tensor(standardized_features, dtype=torch.float)
+    num_influential = int(n_nodes * influential_percent)  
 
     # Compute combined influence score for each node
-    combined_scores = standardized_features.sum(axis=1)
+    #influential_nodes = influential_hubs(features = standardized_features, size = len(graph_nodes), percent = num_influential)
 
-    # Sort nodes based on combined influence scores
-    sorted_nodes = torch.argsort(combined_scores, descending=True)
 
-    # Select the top % percent nodes 
-    influential_percent = 0.2
-    num_influential = int(n_nodes * influential_percent)  
-    influential_nodes = sorted_nodes[:num_influential]
+    # Pick random nodes to influence
+    influential_nodes = random.sample(range(1,len(graph_nodes)),num_influential)
+    
 
+   
     # Print influential nodes
     #print(f"Influential nodes: {influential_nodes.numpy()}")
     
@@ -100,7 +146,6 @@ def SocialNetwork(**kwargs):
 
     # Define PyG data object
     graph_data = Data(x=standardized_features, edge_index=edge_index, y=node_states)
-    
    
 
 
@@ -129,14 +174,14 @@ def SocialNetwork(**kwargs):
                 activation_over_epochs[epoch] = model(graph_data.x, graph_data.edge_index).squeeze().numpy()
     
     # plt.figure(figsize=(10, 6))
-
+    
     for node_id in range(n_nodes): 
         activations = [activation_over_epochs[epoch][node_id] for epoch in activation_over_epochs.keys()]
         plt.plot(list(activation_over_epochs.keys()), activations)
     
 
 
-    
+    make_directories()
     plt.xlabel("Epochs")
     plt.ylabel("Activation Value")
     plt.title("Node Activation Over Time(Change in node's influence)")
@@ -175,7 +220,7 @@ def SocialNetwork(**kwargs):
     # Create file to save data
     with open(f"{DIRECTORY}{SUB_DIRECTORY}/metrics.txt","w") as File:
         File.writelines("Training data:\n")
-        File.writelines(f"Graph Name: {graph_name}\n# of nodes: {n_nodes} - Epochs: {epochs_} - Hidden Layers: {hidden_layers} - Learning Rate: {learning_rate}\n")
+        File.writelines(f"Graph Name: {graph_name}\nNumber of nodes: {n_nodes} - Epochs: {epochs_} - Hidden Layers: {hidden_layers} - Learning Rate: {learning_rate}\n")
         File.writelines(f"Mean Squared Error (MSE): {mse:.4f}\n")
         File.writelines(f"Mean Absolute Error (MAE): {mae:.4f}\n")
         File.writelines(f"R^2 Score: {r2:.4f}\n")
@@ -191,9 +236,7 @@ def SocialNetwork(**kwargs):
 
     explainer = shap.Explainer(predict_fn, graph_data.x.numpy())
     shap_values = explainer(graph_data.x.numpy(),main_effects=True,error_bounds=True)
-    feature_data = [
-            "Degree", "Eigenvector Centrality", "Betweenness Centrality", "PageRank", "Clustering Coefficient"
-        ]
+    feature_data = dataset["columns"]
     fig = plt.figure()
     shap.summary_plot(shap_values, graph_data.x.numpy(),feature_names = feature_data,show=False)
     fig.tight_layout()
@@ -230,30 +273,29 @@ def main():
 
 def RMAT():
     B = nx.read_edgelist(rmat_path, nodetype=int, data=(("weight", float),))
-   
-    G = nx.DiGraph(B)
+    node_mapping = {node: i for i, node in enumerate(B.nodes())}
+    remapped_edges = [(node_mapping[u], node_mapping[v]) for u, v in B.edges()]
+    G = nx.Graph()
+    G.add_edges_from(remapped_edges)
+    # print(len(G.nodes))
+    # pos = nx.spring_layout(G, seed=10)
+    # nx.draw(G, pos, with_labels=False)
+    # nx.draw_networkx_labels(G, pos, font_color='black', font_size=7)
+    # plt.figure(figsize=(10, 10))
+    # plt.show()
+    # return
+    
     graph_name = "RMAT"
-    max_node = -1
-    for from_, to_ in G.edges():
-        current_max = max(max_node,max(from_,to_))
-        max_node=current_max
-
-    for i in range(max_node):
-        if i not in G.nodes:
-            G.add_node(i)
-
     num_nodes = G.number_of_nodes()
     num_edges = G.number_of_edges()
-    # for u, v, data in G.edges(data=True):
-    #     print(f"{u} -- {v}, weight={data['weight']}")
-    SocialNetwork(graph=G, nodes = num_nodes, edges = num_edges,graph_name=graph_name)
+    SocialNetwork(graph=G, nodes = num_nodes, edges = num_edges,graph_name=graph_name, dataset=dataset1)
 
 def NetworkXGraphs():
     n_nodes = 80
     m_edges = 1
     graph_name = "Barabasi Albert Graph"
     G = nx.barabasi_albert_graph(n_nodes, m_edges, seed=1)
-    SocialNetwork(nodes=n_nodes, edges=m_edges, graph=G, graph_name=graph_name)
+    SocialNetwork(nodes=n_nodes, edges=m_edges, graph=G, graph_name=graph_name, dataset=dataset2)
 
 if __name__ == "__main__":
     main()
