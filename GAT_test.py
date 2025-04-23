@@ -13,7 +13,7 @@ from sklearn.metrics import  explained_variance_score, mean_absolute_error, mean
 import shap
 import kagglehub
 import pandas as pd
-
+import copy
 # Kaggle datasets
 
 dataset1= {"handle":"emirhanai/social-media-usage-and-emotional-well-being","file":"/train.csv", "columns":["Daily_Usage_Time (minutes)", "Posts_Per_Day", "Likes_Received_Per_Day", "Comments_Received_Per_Day", "Messages_Sent_Per_Day"]} 
@@ -26,9 +26,9 @@ rmat_path = "/home/fmartinez/research/GAT-test/GTgraph_data/data.txt"
 # Define parameters for model training
 hidden_layers = 32
 learning_rate = 0.001
-epochs_ = 150
+epochs_ = 200
 # Select the top % percent nodes 
-influential_percent = 0.25
+influential_percent = 0.5
 
 
 # Initialize the social network
@@ -68,7 +68,7 @@ def graph_features(**kwargs):
     dataset["columns"] = ["Degree", "Eigenvector Centrality", "Betweenness Centrality", "PageRank"]
      # Generate node features
     pagerank = nx.pagerank(G)
-    #clustering_coeff = nx.clustering(G)
+    clustering_coeff = nx.clustering(G)
     features = []
     for node in G.nodes():
         features.append([ 
@@ -105,9 +105,12 @@ def SocialNetwork(**kwargs):
     
     G = kwargs.get("graph")
     n_nodes = kwargs.get("nodes")
-    m_edges = kwargs.get("edges")
     graph_name = kwargs.get("graph_name")
     dataset = kwargs.get("dataset")
+    dataset_ = copy.deepcopy(dataset)
+    
+    
+
     # Convert to torch tensor
     edge_index = torch.tensor(np.array(G.edges()).T, dtype=torch.long)
    
@@ -115,10 +118,13 @@ def SocialNetwork(**kwargs):
     
     # dataset is only used to add features columns
     #features = graph_features(graph = G, dataset = dataset)
-    
 
-    features = get_kaggle_dataset(dataset=dataset, size = len(graph_nodes))
-
+    # #concatenate graph topoligical features with another dataset
+    features_ = graph_features(graph = G, dataset = dataset)
+    features = np.concatenate((features_,get_kaggle_dataset(dataset=dataset_, size = len(graph_nodes))),axis=1)
+    dataset["columns"] = dataset["columns"] + dataset_["columns"]
+ 
+    #features = get_kaggle_dataset(dataset=dataset,size = len(graph_nodes))
     # Standardize features
     scaler = StandardScaler()
     standardized_features = scaler.fit_transform(features)
@@ -126,11 +132,11 @@ def SocialNetwork(**kwargs):
     num_influential = int(n_nodes * influential_percent)  
 
     # Compute combined influence score for each node
-    #influential_nodes = influential_hubs(features = standardized_features, size = len(graph_nodes), percent = num_influential)
+    influential_nodes = influential_hubs(features = standardized_features, size = len(graph_nodes), percent = num_influential)
 
 
     # Pick random nodes to influence
-    influential_nodes = random.sample(range(1,len(graph_nodes)),num_influential)
+    #influential_nodes = random.sample(range(1,len(graph_nodes)),num_influential)
     
 
    
@@ -168,24 +174,21 @@ def SocialNetwork(**kwargs):
         optimizer.step()
         loss_values.append(loss.item()) 
         if epoch % 10 == 0:
-            print(f"Epoch {epoch}/{epochs}, Loss: {loss.item()}")
+            #print(f"Epoch {epoch}/{epochs}, Loss: {loss.item()}")
             model.eval()
             with torch.no_grad():
                 activation_over_epochs[epoch] = model(graph_data.x, graph_data.edge_index).squeeze().numpy()
     
-    # plt.figure(figsize=(10, 6))
     
     for node_id in range(n_nodes): 
         activations = [activation_over_epochs[epoch][node_id] for epoch in activation_over_epochs.keys()]
         plt.plot(list(activation_over_epochs.keys()), activations)
     
 
-
     make_directories()
     plt.xlabel("Epochs")
     plt.ylabel("Activation Value")
     plt.title("Node Activation Over Time(Change in node's influence)")
-    plt.legend()
     plt.grid(True)
     plt.savefig(f"{DIRECTORY}{SUB_DIRECTORY}/node_activation.jpg")
     plt.close()
@@ -196,7 +199,6 @@ def SocialNetwork(**kwargs):
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.title("Training Loss Over Time")
-    plt.legend()
     plt.grid(True)
     plt.savefig(f"{DIRECTORY}{SUB_DIRECTORY}/training_loss.jpg")
     plt.close()
@@ -225,43 +227,72 @@ def SocialNetwork(**kwargs):
         File.writelines(f"Mean Absolute Error (MAE): {mae:.4f}\n")
         File.writelines(f"R^2 Score: {r2:.4f}\n")
         File.writelines(f"Explained Variance Score: {evs:.4f}\n")
-        File.writelines(f"Predicted Labels: \n{str(predicted_labels)}")
-
+        File.write(f"{'Index':<6} {'Output (Confidence)':<22} {'True Label':<11} {'Predicted Label':<17} {'Correct?':<8}\n")
+        for i, (conf, true, pred) in enumerate(zip(output, true_labels, predicted_labels)):
+            pred_binary = int(pred > 0.3)
+            correct = "Y" if pred_binary == true else "N"
+            File.write(f"{i+1:<6} {conf:<22.4f} {int(true):<11} {pred_binary:<17.1f} {correct:<8}\n")
+    
     #SHAP summary
+    plt.figure(figsize=(10, 10))
     def predict_fn(x):
         x_tensor = torch.tensor(x, dtype=torch.float32)
         with torch.no_grad():
             return model(x_tensor, graph_data.edge_index).squeeze().numpy()  
-
-
     explainer = shap.Explainer(predict_fn, graph_data.x.numpy())
     shap_values = explainer(graph_data.x.numpy(),main_effects=True,error_bounds=True)
     feature_data = dataset["columns"]
     fig = plt.figure()
     shap.summary_plot(shap_values, graph_data.x.numpy(),feature_names = feature_data,show=False)
     fig.tight_layout()
-    fig.savefig(f"{DIRECTORY}{SUB_DIRECTORY}/shap_summary.png", format="png", bbox_inches='tight')
+    fig.savefig(f"{DIRECTORY}{SUB_DIRECTORY}/shap_summary.jpg", format="jpg", bbox_inches='tight')
     plt.close()
+
 
     # Visualization of influence spread
     pos = nx.spring_layout(G, seed=10)
     plt.figure(figsize=(10, 10))
-   
-    # Node color based on influence state/probability
-    node_colors = ['red' if node in influential_nodes else 'green' if output[node].item()>=0.3 else 'white' for node in range(n_nodes)]
-    node_options = {
+
+    #True Labels for graph
+    node_colors_2 = [
+    "orange" if node in influential_nodes else
+    "green" if true_labels[node]>0 else
+    "white"
+    for node in range(n_nodes)
+    ]
+    node_options_2 = {
         "font_size": 15,
         "node_size":750,
-        "node_color":node_colors,
+        "node_color":node_colors_2,
         "edgecolors":"black",
         "width":3
     }
-    nx.draw(G, pos, with_labels=False, **node_options)
+    nx.draw(G, pos, with_labels=False, **node_options_2)
+    node_labels_2 = {node: f"{true_labels[node]:.1f})" for node in range(n_nodes)}
+    nx.draw_networkx_labels(G, pos, labels=node_labels_2, font_color='black', font_size=7)
+    plt.savefig(f"{DIRECTORY}/{SUB_DIRECTORY}/graphTrueLabels.jpg")
+    plt.close()
 
-    # Label nodes with influence probabilities
-    node_labels = {node: f"{output[node].item():.2f})" for node in range(n_nodes)}
-    nx.draw_networkx_labels(G, pos, labels=node_labels, font_color='black', font_size=7)
-    plt.savefig(f"{DIRECTORY}/{SUB_DIRECTORY}/graph.jpg")
+    # Predicted Labels graph
+    node_colors_1 = [
+    #'green' if predicted_labels[node] > 0.3 else
+    'orange' if node in influential_nodes else
+    'white'
+    for node in range(n_nodes)
+]
+    node_options_1 = {
+        "font_size": 15,
+        "node_size":750,
+        "node_color":node_colors_1,
+        "edgecolors":"black",
+        "width":3
+    }
+    pos = nx.spring_layout(G, seed=10)
+    plt.figure(figsize=(10, 10))
+    nx.draw(G, pos, with_labels=False, **node_options_1)
+    node_labels_1 = {node: f"{predicted_labels[node]:.2f})" for node in range(n_nodes)}
+    nx.draw_networkx_labels(G, pos, labels=node_labels_1, font_color='black', font_size=7)
+    plt.savefig(f"{DIRECTORY}/{SUB_DIRECTORY}/graphPredictedLabels.jpg")
     plt.close()
 
 def main():
@@ -277,14 +308,6 @@ def RMAT():
     remapped_edges = [(node_mapping[u], node_mapping[v]) for u, v in B.edges()]
     G = nx.Graph()
     G.add_edges_from(remapped_edges)
-    # print(len(G.nodes))
-    # pos = nx.spring_layout(G, seed=10)
-    # nx.draw(G, pos, with_labels=False)
-    # nx.draw_networkx_labels(G, pos, font_color='black', font_size=7)
-    # plt.figure(figsize=(10, 10))
-    # plt.show()
-    # return
-    
     graph_name = "RMAT"
     num_nodes = G.number_of_nodes()
     num_edges = G.number_of_edges()
